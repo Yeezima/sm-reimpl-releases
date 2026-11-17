@@ -1,0 +1,35 @@
+name: Refresh Round Table after playtest publication
+
+on:
+  release:
+    types: [published]
+
+# No access via the source repository's GITHUB_TOKEN; the separate App is
+# installed only on the private feed repo, with Actions: write and no Contents write.
+permissions: {}
+
+# The receiving workflow supplies its own concurrency and always reads latest main.
+concurrency:
+  group: round-table-relay-playtest
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # Leave cron as the fallback until the owner adds the secret, then the ID.
+    if: ${{ vars.ROUND_TABLE_APP_CLIENT_ID != '' && startsWith(github.event.release.tag_name, 'tester-') && !github.event.release.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Mint a feed-only installation token
+        id: feed-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.ROUND_TABLE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ROUND_TABLE_APP_PRIVATE_KEY }}
+          owner: Yeezima
+          repositories: sm-reimpl-feed
+          permission-actions: write
+      - name: Request a feed refresh
+        env:
+          GH_TOKEN: ${{ steps.feed-token.outputs.token }}
+        run: gh workflow run live-feed-poll.yml --repo Yeezima/sm-reimpl-feed --ref main
